@@ -98,9 +98,26 @@ final class Shelf {
         return new Result(recentApps(ctx, hidden), false);
     }
 
+    /** Hold OK → Remove: the app's card stays away until the app is used again. */
+    static void remove(Context ctx, String pkg) {
+        ThemePrefs.get(ctx).edit().putLong(ThemePrefs.SHELF_HIDDEN + pkg, System.currentTimeMillis()).apply();
+    }
+
+    /** Clear: every card goes until its app is used again. */
+    static void clear(Context ctx) {
+        ThemePrefs.get(ctx).edit().putLong(ThemePrefs.SHELF_CLEARED_AT, System.currentTimeMillis()).apply();
+    }
+
+    /** True when this app's latest activity predates a Remove or Clear. */
+    private static boolean dismissed(android.content.SharedPreferences prefs, String pkg, long activity) {
+        long after = Math.max(prefs.getLong(ThemePrefs.SHELF_CLEARED_AT, 0), prefs.getLong(ThemePrefs.SHELF_HIDDEN + pkg, 0));
+        return activity <= after;
+    }
+
     private static List<Item> watchNext(Context ctx, Set<String> hidden) {
         List<Item> out = new ArrayList<>();
         PackageManager pm = ctx.getPackageManager();
+        android.content.SharedPreferences prefs = ThemePrefs.get(ctx);
         Set<String> seen = new HashSet<>();
         try (Cursor c = ctx.getContentResolver().query(WATCH_NEXT, null, null, null,
                 "last_engagement_time_utc_millis DESC")) {
@@ -109,6 +126,7 @@ final class Shelf {
                 String pkg = str(c, "package_name");
                 String uri = str(c, "intent_uri");
                 if (pkg == null || uri == null || hidden.contains(pkg) || pkg.equals(ctx.getPackageName())) continue;
+                if (dismissed(prefs, pkg, lng(c, "last_engagement_time_utc_millis"))) continue;
                 if (c.getColumnIndex("browsable") >= 0 && c.getInt(c.getColumnIndex("browsable")) == 0) continue;
                 Intent intent = safeIntent(uri, pkg);
                 if (intent == null) continue;
@@ -189,10 +207,11 @@ final class Shelf {
         List<String> pkgs = new ArrayList<>(byPkg.keySet());
         Collections.sort(pkgs, (a, b) -> Long.compare(byPkg.get(b)[0], byPkg.get(a)[0]));
         PackageManager pm = ctx.getPackageManager();
+        android.content.SharedPreferences prefs = ThemePrefs.get(ctx);
         for (String pkg : pkgs) {
             if (out.size() >= 8) break;
             if (pkg.equals(ctx.getPackageName()) || hidden.contains(pkg) || NOT_RECENT.contains(pkg)) continue;
-            if (byPkg.get(pkg)[1] < 30_000) continue;
+            if (byPkg.get(pkg)[1] < 30_000 || dismissed(prefs, pkg, byPkg.get(pkg)[0])) continue;
             Intent launch = pm.getLeanbackLaunchIntentForPackage(pkg);
             if (launch == null) continue;
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
@@ -296,16 +315,23 @@ final class Shelf {
 
     // ---- the row ---------------------------------------------------------------------------------
 
+    interface CardListener {
+        void onCardFocused();
+
+        /** Hold OK on a card: Remove or Clear. */
+        void onCardMenu(Item item, View card);
+    }
+
     static final class Adapter extends RecyclerView.Adapter<Adapter.Holder> {
 
         private final Context ctx;
-        private final Runnable onFocus;
+        private final CardListener listener;
         private final Handler main = new Handler(Looper.getMainLooper());
         private List<Item> items = Collections.emptyList();
 
-        Adapter(Context ctx, Runnable onFocus) {
+        Adapter(Context ctx, CardListener listener) {
             this.ctx = ctx;
-            this.onFocus = onFocus;
+            this.listener = listener;
         }
 
         void submit(List<Item> fresh) {
@@ -382,7 +408,11 @@ final class Shelf {
                 v.setOnFocusChangeListener((view, focused) -> {
                     float s = focused ? 1.08f : 1f;
                     view.animate().scaleX(s).scaleY(s).translationZ(focused ? 12f : 0f).setDuration(160).start();
-                    if (focused) onFocus.run();
+                    if (focused) listener.onCardFocused();
+                });
+                v.setOnLongClickListener(view -> {
+                    if (item != null) listener.onCardMenu(item, view);
+                    return true;
                 });
             }
         }

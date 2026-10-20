@@ -25,6 +25,10 @@ final class ThemePrefs {
     static final String FROST = "frost";
     static final String SHOW_CLOCK = "show_clock";
 
+    /** Jump Back In: cards whose app was last used before these times stay hidden. */
+    static final String SHELF_CLEARED_AT = "shelf_cleared_at";
+    static final String SHELF_HIDDEN = "shelf_hidden:";
+
     static final String SAVER_STYLE = "saver_style";
     static final String SAVER_CLOCK = "saver_clock";
 

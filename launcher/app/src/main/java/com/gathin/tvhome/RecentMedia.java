@@ -95,10 +95,16 @@ final class RecentMedia {
             }
         }
         Map<String, Entry> all = load(ctx);
-        Entry before = all.get(pkg);
         long now = System.currentTimeMillis();
-        String art = before != null && title.equals(before.title) ? before.art : null;
+        // Apps such as Spotify send the new title first and the new cover a moment later, so the artwork is
+        // taken afresh on every update: the track's own web image when there is one, else the bitmap.
+        String art = artUrl(md);
         if (art == null) art = saveArt(ctx, pkg, md, now);
+        Entry before = all.get(pkg);
+        boolean newTrack = before != null && !title.equals(before.title);
+        // A new title that still carries the previous track's cover link: the real cover is on its way; the
+        // card shows the app's own artwork until it lands.
+        if (newTrack && art != null && art.startsWith("http") && art.equals(before.art)) art = null;
         all.put(pkg, new Entry(pkg, title, subtitle, mediaId, art, position, duration, now));
         save(ctx, all);
     }
@@ -120,10 +126,24 @@ final class RecentMedia {
         return null;
     }
 
-    private static String saveArt(Context ctx, String pkg, MediaMetadata md, long now) {
+    /** An http(s) artwork link from the metadata, which names this exact track; null when there is none. */
+    static String artUrl(MediaMetadata md) {
+        String u = text(md, MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI,
+                MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI);
+        return u != null && (u.startsWith("https://") || u.startsWith("http://")) ? u : null;
+    }
+
+    /** The metadata's artwork bitmap, as a software copy that can be scaled and saved; null when there is none. */
+    static Bitmap artBitmap(MediaMetadata md) {
         Bitmap bmp = md.getBitmap(MediaMetadata.METADATA_KEY_ART);
         if (bmp == null) bmp = md.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART);
         if (bmp == null) bmp = md.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON);
+        if (bmp != null && bmp.getConfig() == Bitmap.Config.HARDWARE) bmp = bmp.copy(Bitmap.Config.ARGB_8888, false);
+        return bmp;
+    }
+
+    private static String saveArt(Context ctx, String pkg, MediaMetadata md, long now) {
+        Bitmap bmp = artBitmap(md);
         if (bmp != null) {
             File dir = new File(ctx.getFilesDir(), ART_DIR);
             if (!dir.isDirectory() && !dir.mkdirs()) return null;

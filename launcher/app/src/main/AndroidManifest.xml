@@ -9,6 +9,11 @@
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Speed Up: end other apps' background processes, built-in ones (YouTube, Prime Video, TCL's) included,
+         which is why it needs to see every installed package. -->
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
     <!-- Network menu: ask for a fresh scan of nearby Wi-Fi. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <!-- Needed since Android 10 to read the Wi-Fi network name for the network pill. Never requested at
@@ -88,6 +93,24 @@
             android:banner="@drawable/theme_banner"
             android:taskAffinity="com.gathin.tvhome.theme"
             android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Speed Up: its own tile; a small card over Home that closes background apps and reports freed memory. -->
+        <activity
+            android:name=".SpeedUpActivity"
+            android:exported="true"
+            android:label="@string/speed_app"
+            android:icon="@drawable/ic_speed"
+            android:banner="@drawable/speed_banner"
+            android:taskAffinity="com.gathin.tvhome.speed"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:screenOrientation="landscape"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />

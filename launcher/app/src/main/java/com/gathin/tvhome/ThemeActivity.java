@@ -147,6 +147,10 @@ public final class ThemeActivity extends Activity {
         cycle(apps, "rows_below", R.string.theme_rows_below, () -> String.valueOf(Config.load(this).rowsBelowDock), () ->
                 ThemePrefs.edit(this).putInt(ThemePrefs.ROWS_BELOW_DOCK, (Config.load(this).rowsBelowDock + 1) % 4).apply());
         toggle(apps, "shelf", R.string.theme_shelf, ThemePrefs.SHELF, true, false);
+        row(apps, "shelf_clear", getString(R.string.theme_shelf_clear), () -> "", () -> {
+            Shelf.clear(this);
+            Toast.makeText(this, R.string.shelf_cleared, Toast.LENGTH_SHORT).show();
+        });
         apps.addView(note(getString(R.string.theme_move_hint)));
 
         // Look

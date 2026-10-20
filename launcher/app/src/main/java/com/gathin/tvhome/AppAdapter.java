@@ -238,7 +238,9 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         for (ResolveInfo ri : found) {
             if (ri.activityInfo == null) continue;
             String pkg = ri.activityInfo.packageName;
-            boolean themeApp = pkg.equals(ctx.getPackageName()) && ThemeActivity.class.getName().equals(ri.activityInfo.name);
+            boolean themeApp = pkg.equals(ctx.getPackageName())
+                    && (ThemeActivity.class.getName().equals(ri.activityInfo.name)
+                    || SpeedUpActivity.class.getName().equals(ri.activityInfo.name));
             if ((pkg.equals(ctx.getPackageName()) && !themeApp) || !ri.activityInfo.exported
                     || !LibraryApps.visible(tvPackages.contains(pkg), hidden.contains(pkg), added.contains(pkg), removed.contains(pkg))) continue;
             ComponentName component = new ComponentName(pkg, ri.activityInfo.name);

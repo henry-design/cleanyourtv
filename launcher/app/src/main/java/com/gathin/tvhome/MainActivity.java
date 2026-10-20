@@ -111,6 +111,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean shelfShown;
     private VideoBackground videoBg;
     private HeaderGlass headerGlass;
+    private NowPlaying nowPlaying;
     /** ThemePrefs version this screen was built with; a change made in the Theme app rebuilds Home on resume. */
     private int themeVersion;
     private boolean shelfEnabled = true;
@@ -287,10 +288,26 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         shelfBlock = findViewById(R.id.shelfBlock);
         shelfTitle = findViewById(R.id.shelfTitle);
         RecyclerView shelf = findViewById(R.id.shelf);
-        shelf.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        // The row runs to the screen edge and fades there; the focused card scrolls to the left margin, so
+        // moving right slides the row along instead of pushing focus into the fade.
+        shelf.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false) {
+            @Override
+            public boolean requestChildRectangleOnScreen(@NonNull RecyclerView parent, @NonNull View child,
+                                                         @NonNull Rect rect, boolean immediate, boolean focusedChildVisible) {
+                int dx = child.getLeft() - parent.getPaddingLeft();
+                if (dx == 0) return false;
+                if (immediate || !animations || reducedMotion) parent.scrollBy(dx, 0);
+                else parent.smoothScrollBy(dx, 0);
+                return true;
+            }
+        });
         shelf.setItemAnimator(null);
-        shelfAdapter = new Shelf.Adapter(this, this::hideGlass);
+        shelfAdapter = new Shelf.Adapter(this, new Shelf.CardListener() {
+            @Override public void onCardFocused() { hideGlass(); }
+            @Override public void onCardMenu(Shelf.Item item, View card) { showShelfMenu(item, card); }
+        });
         shelf.setAdapter(shelfAdapter);
+        nowPlaying = new NowPlaying(this, findViewById(R.id.nowPlaying), this::reshowHero);
         shelfBlock.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             if (b - t != ob - ot) syncShelf();
         });
@@ -633,6 +650,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         rebuildOnResume = false;
         videoBg.start();
+        nowPlaying.start();
         Context app = getApplicationContext();
         Shelf.EXEC.execute(() -> {
             // Clips pushed to Movies/TvHome join the rotation from the next switch.
@@ -742,6 +760,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         endReorder();   // Home or another app while reordering keeps the order so far
         resumed = false;
         videoBg.stop();
+        nowPlaying.stop();
         stopAmbientAnimation();
         heroName.animate().cancel();
         ambient.animate().cancel();
@@ -1121,7 +1140,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int color = adapter.ambientColorAt(position);
         heroDockTop = dockTopInRoot;
         heroPosition = position;
-        if (shelfAdapter.getItemCount() > 0) {
+        if (shelfAdapter.getItemCount() > 0 || nowPlaying.visible()) {
             // The top shelf holds Continue Watching instead of the big app name; the glow still follows the dock.
             heroName.animate().cancel();
             heroName.setAlpha(0f);
@@ -1296,16 +1315,48 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
                 shelfTitle.setText(result.watchNext ? R.string.continue_watching : R.string.jump_back_in);
+                RecyclerView shelf = findViewById(R.id.shelf);
+                boolean hadFocus = shelf.hasFocus();
                 boolean had = shelfAdapter.getItemCount() > 0;
                 shelfAdapter.submit(result.items);
-                // Re-show the shelf for a dock tile that is focused right now.
-                if (heroShown && heroPosition >= 0 && !Float.isNaN(heroDockTop)
-                        && had != !result.items.isEmpty()) {
-                    heroShown = false;
-                    showHero(heroPosition, heroDockTop);
-                }
+                int row = result.items.isEmpty() ? View.GONE : View.VISIBLE;
+                shelfTitle.setVisibility(row);
+                shelf.setVisibility(row);
+                if (hadFocus && result.items.isEmpty()) focusTile(Math.max(0, Math.min(heroPosition, COLUMNS - 1)));
+                if (had != !result.items.isEmpty()) reshowHero();
             });
         });
+    }
+
+    /** The shelf's content changed (cards, Now Playing): show or hide it again for the dock tile focused now. */
+    private void reshowHero() {
+        if (heroShown && heroPosition >= 0 && !Float.isNaN(heroDockTop)) {
+            heroShown = false;
+            showHero(heroPosition, heroDockTop);
+        } else {
+            syncShelf();
+        }
+    }
+
+    /** Hold OK on a Jump Back In card: remove that card, or clear the row. */
+    private void showShelfMenu(Shelf.Item item, View card) {
+        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        PopupWindow popup = glassPopup(panel, (int) (240 * density));
+        Context app = getApplicationContext();
+        addSettingsMenuRow(rows, popup, R.string.shelf_remove, () -> {
+            Shelf.remove(app, item.pkg);
+            refreshShelf();
+        });
+        addSettingsMenuRow(rows, popup, R.string.shelf_clear, () -> {
+            Shelf.clear(app);
+            Toast.makeText(this, R.string.shelf_cleared, Toast.LENGTH_SHORT).show();
+            refreshShelf();
+        });
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        popup.setWidth(Math.max((int) (240 * density), panel.getMeasuredWidth()));
+        showNear(popup, panel, card);
+        rows.getChildAt(0).requestFocus();
     }
 
     /** Focuses the visible shelf card whose centre is closest, left to right, to this dock tile's centre. */
@@ -1600,7 +1651,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (position < COLUMNS) {
                 // Dock row: up into the shelf, onto the card nearest this tile even when none sits right above it;
                 // the top bar only when there is no shelf.
-                if (shelfShown && focusNearestShelfCard(position)) {
+                if (shelfShown && (focusNearestShelfCard(position) || nowPlaying.focus())) {
                     grid.playSoundEffect(SoundEffectConstants.NAVIGATION_UP);
                     return true;
                 }

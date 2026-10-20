@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Now Playing: whatever plays in the background, with no panel behind it. Lives at the top of the shelf block. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/nowPlaying"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="70dp"
+    android:layout_marginBottom="18dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:visibility="gone">
+
+    <ImageView
+        android:id="@+id/npArt"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:background="@drawable/np_art_bg"
+        android:scaleType="centerCrop"
+        android:contentDescription="@null" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="20dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/npSource"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#B3FFFFFF"
+            android:textSize="11sp"
+            android:fontFamily="@font/outfit_medium"
+            android:letterSpacing="0.14"
+            android:textAllCaps="true"
+            android:shadowColor="#99000000"
+            android:shadowRadius="6"
+            android:singleLine="true" />
+
+        <TextView
+            android:id="@+id/npTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxWidth="420dp"
+            android:textColor="#FFFFFFFF"
+            android:textSize="18sp"
+            android:fontFamily="@font/outfit_medium"
+            android:shadowColor="#99000000"
+            android:shadowRadius="6"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/npArtist"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxWidth="420dp"
+            android:textColor="#CCFFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="@font/outfit_regular"
+            android:shadowColor="#99000000"
+            android:shadowRadius="6"
+            android:singleLine="true"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/npPrev"
+        style="@style/NowPlayingButton"
+        android:src="@drawable/ic_np_prev"
+        android:contentDescription="@string/np_previous" />
+
+    <ImageView
+        android:id="@+id/npPlay"
+        style="@style/NowPlayingButton"
+        android:src="@drawable/ic_np_pause"
+        android:contentDescription="@string/np_play_pause" />
+
+    <ImageView
+        android:id="@+id/npNext"
+        style="@style/NowPlayingButton"
+        android:src="@drawable/ic_np_next"
+        android:contentDescription="@string/np_next" />
+</LinearLayout>

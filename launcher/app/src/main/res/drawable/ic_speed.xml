@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Speed Up: a lightning bolt in a speedometer arc. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <path
+        android:strokeColor="#E6FFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:pathData="M18,64A32,32 0,1 1,78 64" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M52,22L30,54h14l-4,22 22,-32H48z" />
+</vector>

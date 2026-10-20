@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Speed Up tile: a teal-to-blue wash with the bolt in the middle. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <size android:width="320dp" android:height="180dp" />
+            <gradient android:angle="315" android:startColor="#FF00B4A0" android:centerColor="#FF1E88E5"
+                android:endColor="#FF3D3BD1" />
+        </shape>
+    </item>
+    <item android:drawable="@drawable/ic_speed" android:gravity="center" android:width="104dp" android:height="104dp" />
+</layer-list>
