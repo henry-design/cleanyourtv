@@ -15,6 +15,14 @@
         android:importantForAccessibility="no"
         android:visibility="gone" />
 
+    <!-- Dips to black between clips so a switch never flashes a blank frame. -->
+    <View
+        android:id="@+id/bgFade"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FF000000"
+        android:visibility="gone" />
+
     <!-- Keeps the header and the shelf legible over bright footage. -->
     <View
         android:id="@+id/bgScrim"
@@ -89,17 +97,47 @@
             android:scrollbars="none" />
     </LinearLayout>
 
-    <LinearLayout
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:paddingStart="56dp"
-        android:paddingEnd="56dp"
-        android:paddingTop="26dp">
+        android:layout_height="match_parent">
+
+        <!-- The grid runs the full height, under the header: rows scrolled up show through the header's frosted
+             glass (HeaderGlass) and are clipped from sharp drawing there in code. The grid itself must not clip, so
+             scaled tiles can overflow their cells. -->
+        <FrameLayout
+            android:id="@+id/gridWrap"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:paddingStart="56dp"
+            android:paddingEnd="56dp">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/grid"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:paddingTop="10dp"
+                android:paddingBottom="40dp"
+                android:clipToPadding="false"
+                android:clipChildren="false"
+                android:overScrollMode="never"
+                android:scrollbars="none"
+                android:descendantFocusability="afterDescendants" />
+        </FrameLayout>
+
+        <com.gathin.tvhome.HeaderGlass
+            android:id="@+id/headerGlass"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:importantForAccessibility="no" />
 
         <RelativeLayout
+            android:id="@+id/header"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            android:paddingStart="56dp"
+            android:paddingEnd="56dp"
+            android:paddingTop="26dp"
+            android:paddingBottom="14dp">
 
             <LinearLayout
                 android:id="@+id/leftBlock"
@@ -197,6 +235,8 @@
 
                         <TextClock
                             android:id="@+id/date"
+                            android:shadowColor="#99000000"
+                            android:shadowRadius="8"
                             android:gravity="left"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -272,27 +312,7 @@
                     android:nextFocusDown="@+id/grid" />
             </LinearLayout>
         </RelativeLayout>
-
-        <!-- The wrapper clips at the grid's edge; the grid itself must not clip so scaled tiles can overflow their cells. -->
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:layout_marginTop="10dp">
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/grid"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:paddingTop="10dp"
-                android:paddingBottom="40dp"
-                android:clipToPadding="false"
-                android:clipChildren="false"
-                android:overScrollMode="never"
-                android:scrollbars="none"
-                android:descendantFocusability="afterDescendants" />
-        </FrameLayout>
-    </LinearLayout>
+    </FrameLayout>
 
     <!-- The single floating glass highlight that springs between tiles. -->
     <com.gathin.tvhome.GlassView

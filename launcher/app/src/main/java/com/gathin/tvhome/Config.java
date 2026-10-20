@@ -190,6 +190,7 @@ final class Config {
         syncThemeChoices(choices, dir, file);
         int chosenColumns = choices.getInt("columns", columns);
         if (chosenColumns >= 4 && chosenColumns <= 7) columns = chosenColumns;
+        rowsBelow = ThemePrefs.clamp(choices.getInt(ThemePrefs.ROWS_BELOW_DOCK, rowsBelow), 0, 3);
         animations = choices.getBoolean("animations", animations);
         advancedEffects = choices.getBoolean("advanced_effects", advancedEffects);
         File wallpaper = dir != null ? new File(dir, WALLPAPER_NAME) : null;

@@ -167,15 +167,24 @@ final class Shelf {
         try {
             stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_BEST, now - 14L * 24 * 3600 * 1000, now);
         } catch (RuntimeException e) {
-            return out;
+            stats = Collections.emptyList();
         }
-        if (stats == null) return out;
+        if (stats == null) stats = Collections.emptyList();
         Map<String, long[]> byPkg = new HashMap<>();   // pkg -> {last used, foreground ms}
         for (UsageStats u : stats) {
             long[] v = byPkg.get(u.getPackageName());
             if (v == null) byPkg.put(u.getPackageName(), v = new long[2]);
             v[0] = Math.max(v[0], u.getLastTimeUsed());
             v[1] += u.getTotalTimeInForeground();
+        }
+        // What apps last played (MediaListener) puts them in the row even after a short visit.
+        Map<String, RecentMedia.Entry> played = RecentMedia.load(ctx);
+        for (RecentMedia.Entry e : played.values()) {
+            if (now - e.time > 14L * 24 * 3600 * 1000) continue;
+            long[] v = byPkg.get(e.pkg);
+            if (v == null) byPkg.put(e.pkg, v = new long[2]);
+            v[0] = Math.max(v[0], e.time);
+            v[1] = Math.max(v[1], 30_000);
         }
         List<String> pkgs = new ArrayList<>(byPkg.keySet());
         Collections.sort(pkgs, (a, b) -> Long.compare(byPkg.get(b)[0], byPkg.get(a)[0]));
@@ -193,8 +202,19 @@ final class Shelf {
                 if (banner == null) banner = pm.getApplicationBanner(pkg);
             } catch (PackageManager.NameNotFoundException ignored) {
             }
-            out.add(new Item(appLabel(pm, pkg), ctx.getString(R.string.shelf_recent), pkg, null, launch, -1f,
-                    banner, appIcon(pm, pkg)));
+            String label = appLabel(pm, pkg);
+            RecentMedia.Entry media = played.get(pkg);
+            if (media != null && now - media.time <= 14L * 24 * 3600 * 1000) {
+                // The thing it played, not just the app: thumbnail, title, channel and how far in.
+                Intent resume = RecentMedia.resumeIntent(media);
+                String sub = media.subtitle != null ? label + " · " + media.subtitle : label;
+                String art = RecentMedia.art(media);
+                out.add(new Item(media.title, sub, pkg, art, resume != null ? resume : launch,
+                        media.progress(), art == null ? banner : null, appIcon(pm, pkg)));
+            } else {
+                out.add(new Item(label, ctx.getString(R.string.shelf_recent), pkg, null, launch, -1f,
+                        banner, appIcon(pm, pkg)));
+            }
         }
         return out;
     }

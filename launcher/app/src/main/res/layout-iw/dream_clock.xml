@@ -5,6 +5,27 @@
     android:layout_height="match_parent"
     android:background="#FF000000">
 
+    <VideoView
+        android:id="@+id/dreamVideo"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:visibility="gone" />
+
+    <View
+        android:id="@+id/dreamFade"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FF000000"
+        android:visibility="gone" />
+
+    <View
+        android:id="@+id/dreamScrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#40000000"
+        android:visibility="gone" />
+
     <View
         android:id="@+id/dreamAmbient"
         android:layout_width="match_parent"

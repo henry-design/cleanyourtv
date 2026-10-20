@@ -73,7 +73,9 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -107,9 +109,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private TextView shelfTitle;
     private Shelf.Adapter shelfAdapter;
     private boolean shelfShown;
-    /** Where the shelf's bottom edge goes (root coordinates), kept so a late layout can re-place it. */
-    private float shelfBottom = Float.NaN;
     private VideoBackground videoBg;
+    private HeaderGlass headerGlass;
+    /** ThemePrefs version this screen was built with; a change made in the Theme app rebuilds Home on resume. */
+    private int themeVersion;
+    private boolean shelfEnabled = true;
+    private boolean resumed;
+    /** Bottom of the header in grid coordinates: the grid runs under it, so this is the visible top. */
+    private int headerBottom;
     private int ambientColor = -1;
     private ValueAnimator ambientAnimator;
     private boolean heroShown;
@@ -269,7 +276,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         sky = findViewById(R.id.sky);
         sky.setIntensity(cfg.skyIntensity);
         glass = findViewById(R.id.glass);
-        if (festive) glass.setAccent(festival.accentColor());
+        glass.setAccent(baseAccent());
         ambient = findViewById(R.id.ambient);
         // The glow is one bitmap, so its alpha can be applied while drawing it. Otherwise every frame of
         // a fade renders it into a full-screen offscreen buffer first.
@@ -285,12 +292,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         shelfAdapter = new Shelf.Adapter(this, this::hideGlass);
         shelf.setAdapter(shelfAdapter);
         shelfBlock.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            if (!Float.isNaN(shelfBottom) && b - t != ob - ot) v.setY(shelfBottom - v.getHeight());
+            if (b - t != ob - ot) syncShelf();
         });
-        File backgrounds = getExternalFilesDir("backgrounds");
-        File shared = new File(android.os.Environment.getExternalStoragePublicDirectory(
-                android.os.Environment.DIRECTORY_MOVIES), "TvHome");
-        videoBg = new VideoBackground(this, findViewById(R.id.bgVideo), findViewById(R.id.bgScrim), backgrounds, shared);
+        videoBg = new VideoBackground(this, findViewById(R.id.bgVideo), findViewById(R.id.bgScrim),
+                findViewById(R.id.bgFade), false);
+        themeVersion = ThemePrefs.version(this);
+        shelfEnabled = ThemePrefs.shelf(this);
+        if (!ThemePrefs.showClock(this)) findViewById(R.id.leftBlock).setVisibility(View.INVISIBLE);
         greeting = findViewById(R.id.greeting);
         greetingColor = greeting.getCurrentTextColor();
         btnWifi = findViewById(R.id.btnWifi);
@@ -335,10 +343,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 int bottom = top + rect.height();
                 // A row already fully on screen stays put, even inside the bottom padding (the last row
                 // rows_below_dock leaves visible ends there; nudging it up was the bug). A row that has to scroll
-                // in still stops at the padding line, clear of the screen edge, as before.
+                // in still stops at the padding line, clear of the screen edge, as before. The grid runs under
+                // the header, so the visible top is the header's bottom edge.
                 int limitBottom = getHeight() - getPaddingBottom();
                 int dy;
-                if (top < 0) dy = top;
+                if (top < headerBottom) dy = top - headerBottom;
                 else if (bottom <= getHeight()) dy = 0;
                 else dy = Math.min(top, bottom - limitBottom);
                 if (dy == 0) return false;
@@ -367,7 +376,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void onChildViewDetachedFromWindow(@NonNull View v) {
             }
         });
-        if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density));
+        if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density,
+                ThemePrefs.FROST_ALPHA[ThemePrefs.frost(this)]));
         if (animations) {
             int enterAnim = reducedMotion ? R.anim.tile_enter_reduced : R.anim.tile_enter;
             float enterDelay = reducedMotion ? 0f : 0.06f;
@@ -384,7 +394,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // rows_below_dock grid rows under it; the rest of the grid stays below until you press Down.
         int rowsBelowDock = cfg.rowsBelowDock;
         grid.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            int h = b - t;
+            int h = b - t - headerBottom;   // the room below the header, as when the grid sat under it
             // Item height follows the tile size, which follows the columns and the rows that must fit (AppAdapter.tileWidthPx).
             int inner = (r - l) - grid.getPaddingLeft() - grid.getPaddingRight();
             int tileW = AppAdapter.tileWidthPx(inner, h, COLUMNS, rowsBelowDock, cfg.dockTitle, cfg.dockRow, density);
@@ -400,10 +410,35 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (MainActivity.this.dockRow && cfg.dockTitle && rowsBelowDock > 0) want = Math.max(want, (int) (AppAdapter.TITLE_ROOM_DP * density));
             // No dock to push down: the grid starts at the top, with room for the first row's zoom and glass.
             if (!MainActivity.this.dockRow) want = (int) (AppAdapter.TOP_ROOM_DP * density);
+            want += headerBottom;
             if (grid.getPaddingTop() != want) {
                 grid.setPadding(grid.getPaddingLeft(), want, grid.getPaddingRight(), grid.getPaddingBottom());
             }
         });
+
+        // Frosted header: rows scrolled up under it are drawn only through its blur, never sharp.
+        headerGlass = findViewById(R.id.headerGlass);
+        headerGlass.attach(grid);
+        headerGlass.addSource(shelfBlock);
+        grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                syncShelf();   // the Jump Back In row rides along with the dock, up under the header
+            }
+        });
+        View header = findViewById(R.id.header);
+        View gridWrap = findViewById(R.id.gridWrap);
+        View.OnLayoutChangeListener headerSync = (v, l, t, r, b, ol, ot, or, ob) -> {
+            int bottom = header.getBottom();
+            gridWrap.setClipBounds(new Rect(0, bottom, gridWrap.getWidth(), gridWrap.getHeight()));
+            headerGlass.setGlassHeight(Math.max(1, bottom));
+            if (bottom != headerBottom) {
+                headerBottom = bottom;
+                grid.requestLayout();
+            }
+        };
+        header.addOnLayoutChangeListener(headerSync);
+        gridWrap.addOnLayoutChangeListener(headerSync);
 
         // Keep the glass glued to its tile while the grid scrolls.
         grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -444,7 +479,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnInputs = findViewById(R.id.btnInputs);
         View btnSettings = findViewById(R.id.btnSettings);
         btnInputs.setOnClickListener(v -> showInputs());
-        btnWifi.setOnClickListener(v -> openNetworkPill());
+        btnWifi.setOnClickListener(v -> showNetworks());
         btnWifi.setOnLongClickListener(v -> {
             open(systemIntent(Settings.ACTION_WIFI_SETTINGS));
             return true;
@@ -586,10 +621,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onResume() {
         super.onResume();
         // A festival that started or ended while Home was in the background: rebuild with or without it.
-        if (festive != festival.active(LocalDate.now())) {
+        if (festive != festival.active(LocalDate.now()) || themeVersion != ThemePrefs.version(this)) {
             recreate();
             return;
         }
+        resumed = true;
         promptsPaused = false;
         if (rebuildOnResume) {
             tilesReady = false;
@@ -597,6 +633,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         rebuildOnResume = false;
         videoBg.start();
+        Context app = getApplicationContext();
+        Shelf.EXEC.execute(() -> {
+            // Clips pushed to Movies/TvHome join the rotation from the next switch.
+            if (VideoBackground.importShared(app) > 0) runOnUiThread(() -> {
+                if (!resumed) return;
+                videoBg.stop();
+                videoBg.start();
+            });
+        });
         refreshShelf();
         updateGreeting();
         updateWifiLabel();
@@ -695,6 +740,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onPause() {
         super.onPause();
         endReorder();   // Home or another app while reordering keeps the order so far
+        resumed = false;
         videoBg.stop();
         stopAmbientAnimation();
         heroName.animate().cancel();
@@ -841,8 +887,29 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         addSettingsMenuRow(rows, popup, R.string.tile_app_info, () -> adapter.openAppInfo(pkg));
         panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
         popup.setWidth(Math.max((int) (200 * density), panel.getMeasuredWidth()));
-        dropIn(popup, panel, card, Gravity.START);
+        showNear(popup, panel, card);
         rows.getChildAt(0).requestFocus();
+    }
+
+    /** Opens the menu under the anchor, or above it when the screen has no room below, kept on screen sideways. */
+    private void showNear(PopupWindow popup, View panel, View anchor) {
+        int w = popup.getWidth(), h = panel.getMeasuredHeight();
+        int margin = (int) (24 * density), gap = (int) (14 * density);
+        Rect r = new Rect(0, 0, anchor.getWidth(), anchor.getHeight());
+        root.offsetDescendantRectToMyCoords(anchor, r);
+        // The focused tile is drawn zoomed; measure from its zoomed edges.
+        float grow = (anchor.getScaleY() - 1f) * anchor.getHeight() / 2f;
+        int top = (int) (r.top - grow), bottom = (int) (r.bottom + grow);
+        boolean above = bottom + gap + h > root.getHeight() - margin && top - gap - h >= margin;
+        int y = above ? top - gap - h : Math.min(bottom + gap, root.getHeight() - margin - h);
+        int x = Math.max(margin, Math.min(r.left, root.getWidth() - margin - w));
+        panel.setAlpha(0f);
+        panel.setPivotY(above ? h : 0f);
+        panel.setScaleY(0.92f);
+        panel.setTranslationY((above ? 8 : -8) * density);
+        popup.showAtLocation(root, Gravity.TOP | Gravity.START, x, Math.max(margin, y));
+        panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(220)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
     }
 
     /** Hold OK → Move: reorder mode with this tile already picked up. */
@@ -883,7 +950,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         drop();
         reordering = false;
         adapter.setReordering(false);
-        glass.setAccent(festive ? festival.accentColor() : 0);
+        glass.setAccent(baseAccent());
         btnReorder.setActivated(false);
         List<String> keys = adapter.movableKeys();
         List<String> before = orderAtStart;
@@ -1058,7 +1125,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // The top shelf holds Continue Watching instead of the big app name; the glow still follows the dock.
             heroName.animate().cancel();
             heroName.setAlpha(0f);
-            showShelf(dockTopInRoot);
+            showShelf();
             if (!heroShown || !animations || reducedMotion) {
                 ambient.animate().cancel();
                 setAmbient(color);
@@ -1215,7 +1282,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private int heroPosition = -1;
 
     /** Reloads Continue Watching in the background; the shelf appears (or goes) at the next dock focus. */
+    /** Glass highlight colour: a festival's accent, else the Theme app's choice (0 = white glass). */
+    private int baseAccent() {
+        return festive ? festival.accentColor() : ThemePrefs.ACCENTS[ThemePrefs.accent(this)];
+    }
+
     private void refreshShelf() {
+        if (!shelfEnabled) return;
         Set<String> hidden = new HashSet<>(hiddenApps);
         Context app = getApplicationContext();
         Shelf.EXEC.execute(() -> {
@@ -1235,14 +1308,62 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
     }
 
-    private void showShelf(float dockTopInRoot) {
-        // Above the dock's glass band (DockDecoration pads the band 14dp past the tiles), with a little air.
-        shelfBottom = dockTopInRoot - 14 * density - 16 * density;
-        shelfBlock.setY(shelfBottom - shelfBlock.getHeight());
-        if (shelfShown) return;
+    /** Focuses the visible shelf card whose centre is closest, left to right, to this dock tile's centre. */
+    private boolean focusNearestShelfCard(int dockPosition) {
+        RecyclerView.ViewHolder holder = grid.findViewHolderForAdapterPosition(dockPosition);
+        RecyclerView shelf = findViewById(R.id.shelf);
+        if (holder == null || shelf == null || shelf.getChildCount() == 0) return false;
+        Rect tile = new Rect(0, 0, holder.itemView.getWidth(), holder.itemView.getHeight());
+        root.offsetDescendantRectToMyCoords(holder.itemView, tile);
+        View best = null;
+        int bestDistance = Integer.MAX_VALUE;
+        for (int i = 0; i < shelf.getChildCount(); i++) {
+            View card = shelf.getChildAt(i);
+            Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
+            root.offsetDescendantRectToMyCoords(card, r);
+            if (r.right < 0 || r.left > root.getWidth()) continue;
+            int d = Math.abs(r.centerX() - tile.centerX());
+            if (d < bestDistance) {
+                bestDistance = d;
+                best = card;
+            }
+        }
+        return best != null && best.requestFocus();
+    }
+
+    /**
+     * Parks the shelf just above the dock's glass band (DockDecoration pads the band 14dp past the tiles), from
+     * where the dock really is right now, so it follows every scroll. The part that slides under the header is
+     * clipped here and shows only through the header's blur.
+     */
+    private void syncShelf() {
+        if (!shelfShown) return;
+        RecyclerView.ViewHolder dock = grid.findViewHolderForAdapterPosition(0);
+        View card = dock != null ? dock.itemView.findViewById(R.id.card) : null;
+        float y;
+        if (card != null && card.isAttachedToWindow()) {
+            Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
+            root.offsetDescendantRectToMyCoords(card, r);
+            y = r.top - 30 * density - shelfBlock.getHeight();
+        } else {
+            y = -shelfBlock.getHeight();   // the dock scrolled away: the shelf is long gone above it
+        }
+        shelfBlock.setY(y);
+        int clipTop = (int) Math.max(0, headerBottom - y);
+        shelfBlock.setClipBounds(clipTop > 0
+                ? new Rect(0, Math.min(clipTop, shelfBlock.getHeight()), shelfBlock.getWidth(), shelfBlock.getHeight()) : null);
+        headerGlass.requestCapture();
+    }
+
+    private void showShelf() {
+        if (shelfShown) {
+            syncShelf();
+            return;
+        }
         shelfShown = true;
         shelfBlock.animate().cancel();
         shelfBlock.setVisibility(View.VISIBLE);
+        syncShelf();
         if (animations) shelfBlock.animate().alpha(1f).setDuration(reducedMotion ? 120 : 260).start();
         else shelfBlock.setAlpha(1f);
     }
@@ -1260,8 +1381,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     }
 
+    /** Hides the big app name and the glow. The shelf stays: it scrolls away under the header with the dock. */
     private void hideHero() {
-        hideShelf();
         if (!heroShown) return;
         stopAmbientAnimation();
         heroName.animate().cancel();
@@ -1476,7 +1597,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     rtlAppGrid, keyCode == KeyEvent.KEYCODE_DPAD_LEFT);
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-            if (position < COLUMNS) return false;          // dock row: let focus move to the top bar
+            if (position < COLUMNS) {
+                // Dock row: up into the shelf, onto the card nearest this tile even when none sits right above it;
+                // the top bar only when there is no shelf.
+                if (shelfShown && focusNearestShelfCard(position)) {
+                    grid.playSoundEffect(SoundEffectConstants.NAVIGATION_UP);
+                    return true;
+                }
+                return false;
+            }
             target = position - COLUMNS;
         } else {
             int lastRowStart = ((count - 1) / COLUMNS) * COLUMNS;
@@ -1824,6 +1953,99 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         open(new Intent(inputAction).setDataAndType(uri, "vnd.android.cursor.item/channel"));
     }
 
+    /**
+     * Dropdown under the network pill, like Inputs: the current network, then nearby Wi-Fi by signal, then
+     * Wi-Fi settings (and the VPN app, if one is configured). Android 11 lets only the system switch Wi-Fi, so
+     * choosing another network opens the TV's Wi-Fi settings to finish there.
+     */
+    private void showNetworks() {
+        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        int width = Math.max(btnWifi.getWidth(), (int) (300 * density));
+        final PopupWindow popup = glassPopup(panel, width);
+        Intent wifiSettings = systemIntent(Settings.ACTION_WIFI_SETTINGS);
+
+        WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        String current = null;
+        if (wm != null) {
+            WifiInfo info = wm.getConnectionInfo();
+            String ssid = info != null ? info.getSSID() : null;
+            if (ssid != null) {
+                ssid = ssid.replace("\"", "").trim();
+                if (!ssid.isEmpty() && !ssid.contains("unknown") && !ssid.equals("0x")) current = ssid;
+            }
+        }
+        if (current != null) {
+            addNetworkRow(rows, popup, current, getString(R.string.connected), true, () -> open(wifiSettings));
+        } else if (getString(R.string.ethernet).contentEquals(btnWifi.getText())) {
+            addNetworkRow(rows, popup, getString(R.string.ethernet), getString(R.string.connected), true,
+                    () -> open(systemIntent(Settings.ACTION_SETTINGS)));
+        }
+
+        List<android.net.wifi.ScanResult> nearby = new ArrayList<>();
+        if (wm != null) {
+            try {
+                Map<String, android.net.wifi.ScanResult> best = new HashMap<>();
+                for (android.net.wifi.ScanResult s : wm.getScanResults()) {
+                    String ssid = s.SSID == null ? "" : s.SSID.trim();
+                    if (ssid.isEmpty() || ssid.equals(current)) continue;
+                    android.net.wifi.ScanResult seen = best.get(ssid);
+                    if (seen == null || s.level > seen.level) best.put(ssid, s);
+                }
+                nearby.addAll(best.values());
+                Collections.sort(nearby, (a, b) -> Integer.compare(b.level, a.level));
+                wm.startScan();   // fresher results next time; throttled by the system, harmless if refused
+            } catch (SecurityException ignored) {
+            }
+        }
+        if (!nearby.isEmpty()) {
+            if (rows.getChildCount() > 0) addSeparator(rows);
+            for (android.net.wifi.ScanResult s : nearby.subList(0, Math.min(6, nearby.size()))) {
+                String ssid = s.SSID.trim();
+                String caps = s.capabilities == null ? "" : s.capabilities;
+                boolean secured = caps.contains("WPA") || caps.contains("WEP") || caps.contains("SAE") || caps.contains("PSK");
+                int level = WifiManager.calculateSignalLevel(s.level, 4);
+                String status = getString(secured ? R.string.net_secured : R.string.net_open) + " · "
+                        + getString(level >= 3 ? R.string.net_strong : level == 2 ? R.string.net_good : R.string.net_weak);
+                addNetworkRow(rows, popup, ssid, status, false, () -> {
+                    Toast.makeText(this, getString(R.string.net_pick, ssid), Toast.LENGTH_LONG).show();
+                    open(wifiSettings);
+                });
+            }
+        } else if (rows.getChildCount() == 0) {
+            addNetworkRow(rows, popup, getString(R.string.net_none), "", false, () -> open(wifiSettings));
+        }
+
+        addSeparator(rows);
+        addInputRow(rows, popup, R.drawable.ic_settings, getString(R.string.wifi_settings), -1, () -> open(wifiSettings));
+        if (!vpnApp.isEmpty()) {
+            addInputRow(rows, popup, R.drawable.ic_lock, getString(R.string.vpn), -1, this::openNetworkPill);
+        }
+
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        popup.setWidth(Math.max(width, Math.min(panel.getMeasuredWidth(), (int) (380 * density))));
+        // Wider than the pill and near the screen edge: hang it from the pill's far side so it stays on screen.
+        int alignment = getResources().getBoolean(R.bool.rtl_menu_bar) ? Gravity.START : Gravity.END;
+        dropIn(popup, panel, btnWifi, alignment);
+        rows.getChildAt(0).requestFocus();
+    }
+
+    private void addNetworkRow(LinearLayout rows, PopupWindow popup, String name, String status, boolean connected,
+                               Runnable action) {
+        View row = getLayoutInflater().inflate(R.layout.item_input, rows, false);
+        ((ImageView) row.findViewById(R.id.icon)).setImageResource(R.drawable.ic_wifi);
+        ((TextView) row.findViewById(R.id.title)).setText(name);
+        TextView st = row.findViewById(R.id.status);
+        st.setText(status);
+        st.setVisibility(status.isEmpty() ? View.GONE : View.VISIBLE);
+        row.findViewById(R.id.dot).setVisibility(connected ? View.VISIBLE : View.GONE);
+        row.setOnClickListener(v -> {
+            popup.dismiss();
+            action.run();
+        });
+        rows.addView(row);
+    }
+
     /** Dropdown menu under the Inputs pill: HDMI ports (with connection state), AV and Live TV. */
     private void showInputs() {
         View anchor = findViewById(R.id.btnInputs);
@@ -1984,6 +2206,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 new Intent(this, LauncherSettingsActivity.class), LAUNCHER_SETTINGS_REQUEST));
         if (moduleCards) addSettingsMenuRow(rows, popup, R.string.module_cards, this::showModuleCards);
         addSettingsMenuRow(rows, popup, R.string.reorder, this::toggleReorder);
+        addSettingsMenuRow(rows, popup, R.string.theme_app, () -> startActivity(new Intent(this, ThemeActivity.class)));
         panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
         popup.setWidth(Math.max((int) (200 * density), panel.getMeasuredWidth()));
         // Hebrew puts Settings at the left of the header: grow the menu inward from it.

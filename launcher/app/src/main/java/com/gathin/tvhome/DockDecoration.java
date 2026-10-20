@@ -20,14 +20,22 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     private final RectF rect = new RectF();
     private float shaderTop = Float.NaN, shaderBottom = Float.NaN;
 
-    DockDecoration(int dockSize, float density) {
+    /** Frost strength from the Theme app: scales the milky fill (1 = default). */
+    private final float frost;
+
+    DockDecoration(int dockSize, float density, float frost) {
         this.dockSize = dockSize;
         this.density = density;
+        this.frost = frost;
         edge.setStyle(Paint.Style.STROKE);
         edge.setStrokeWidth(density);
         edge.setColor(0x40FFFFFF);
         sheen.setStyle(Paint.Style.STROKE);
         sheen.setStrokeWidth(1.5f * density);
+    }
+
+    private int white(int alpha) {
+        return Math.min(255, Math.round(alpha * frost)) << 24 | 0xFFFFFF;
     }
 
     @Override
@@ -69,7 +77,7 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
             shaderTop = rect.top;
             shaderBottom = rect.bottom;
             band.setShader(new android.graphics.LinearGradient(0, rect.top, 0, rect.bottom,
-                    new int[]{0x47FFFFFF, 0x24FFFFFF, 0x1AFFFFFF}, new float[]{0f, 0.5f, 1f},
+                    new int[]{white(0x47), white(0x24), white(0x1A)}, new float[]{0f, 0.5f, 1f},
                     android.graphics.Shader.TileMode.CLAMP));
             sheen.setShader(new android.graphics.LinearGradient(0, rect.top, 0, rect.top + radius,
                     0x80FFFFFF, 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP));

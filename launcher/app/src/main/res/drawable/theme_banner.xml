@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Theme app tile: a violet-to-coral wash with the palette in the middle. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <size android:width="320dp" android:height="180dp" />
+            <gradient android:angle="315" android:startColor="#FF4B3BD1" android:centerColor="#FFA548C8"
+                android:endColor="#FFFF7A59" />
+        </shape>
+    </item>
+    <item android:drawable="@drawable/ic_theme" android:gravity="center" android:width="104dp" android:height="104dp" />
+</layer-list>

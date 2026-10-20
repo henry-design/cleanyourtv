@@ -27,6 +27,8 @@ public class ClockDream extends DreamService {
     private GradientDrawable glow;
     private int colorIndex;
     private int glowColor;
+    private VideoBackground aerial;
+    private boolean showClock = true;
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -54,11 +56,22 @@ public class ClockDream extends DreamService {
                 glow.setGradientRadius((r - l) * 0.55f));
         colorIndex = random.nextInt(PALETTE.length);
         setGlow(PALETTE[colorIndex]);
+
+        // Aerial style (Theme app): the Home clips play behind the clock; the glow would only muddy them.
+        if (ThemePrefs.saverStyle(this) == ThemePrefs.SAVER_AERIAL && !VideoBackground.list(this).isEmpty()) {
+            aerial = new VideoBackground(this, findViewById(R.id.dreamVideo), findViewById(R.id.dreamScrim),
+                    findViewById(R.id.dreamFade), true);
+            ambient.setVisibility(View.GONE);
+        }
+        showClock = aerial == null || ThemePrefs.saverClock(this);
+        if (!showClock) content.setVisibility(View.GONE);
     }
 
     @Override
     public void onDreamingStarted() {
         super.onDreamingStarted();
+        if (aerial != null) aerial.start();
+        if (!showClock) return;
         content.setAlpha(0f);
         content.post(() -> {
             placeClock();
@@ -70,12 +83,14 @@ public class ClockDream extends DreamService {
     @Override
     public void onDreamingStopped() {
         handler.removeCallbacks(tick);
+        if (aerial != null) aerial.stop();
         super.onDreamingStopped();
     }
 
     @Override
     public void onDetachedFromWindow() {
         handler.removeCallbacks(tick);
+        if (aerial != null) aerial.stop();
         super.onDetachedFromWindow();
     }
 

@@ -9,6 +9,8 @@
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Network menu: ask for a fresh scan of nearby Wi-Fi. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <!-- Needed since Android 10 to read the Wi-Fi network name for the network pill. Never requested at
          runtime: build-and-install grants it with pm grant, so lint's Android 12 "ask for COARSE with
          FINE" rule does not apply here. -->
@@ -20,6 +22,9 @@
     <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- Theme app: "Start screensaver after" writes screen_off_timeout; granted with appops by the installer. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
     <!-- Background videos in the shared Movies/TvHome folder; granted with pm grant by the installer. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
@@ -74,6 +79,21 @@
             </intent-filter>
         </activity>
 
+        <!-- The Theme app: its own tile on Home and in the TV's app list. -->
+        <activity
+            android:name=".ThemeActivity"
+            android:exported="true"
+            android:label="@string/theme_app"
+            android:icon="@drawable/ic_theme"
+            android:banner="@drawable/theme_banner"
+            android:taskAffinity="com.gathin.tvhome.theme"
+            android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name=".LauncherSettingsActivity"
             android:exported="false"
@@ -110,11 +130,23 @@
                 android:resource="@xml/home_key_service" />
         </service>
 
+        <!-- Notices what apps play (media sessions) for Jump Back In; never reads notifications. Enabled by the
+             installer: cmd notification allow_listener com.gathin.tvhome/com.gathin.tvhome.MediaListener -->
+        <service
+            android:name=".MediaListener"
+            android:label="@string/app_name"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <!-- Screensaver: pick it in Settings, or `settings put secure screensaver_components
              com.gathin.tvhome/.ClockDream` over adb. -->
         <service
             android:name=".ClockDream"
-            android:label="@string/dream_name"
+            android:label="@string/screensaver_name"
             android:exported="true"
             android:permission="android.permission.BIND_DREAM_SERVICE">
             <intent-filter>

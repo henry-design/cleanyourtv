@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Theme app icon: a painter's palette with five colours. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <path
+        android:fillColor="#FFF5F5F7"
+        android:pathData="M48,10C26,10 10,26 10,46c0,20 16,38 36,38c6,0 9,-3 9,-8c0,-3 -2,-5 -2,-8c0,-4 3,-7 7,-7h8c10,0 18,-8 18,-18C86,25 69,10 48,10z" />
+    <path android:fillColor="#FFFF6FAE" android:pathData="M30,40m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+    <path android:fillColor="#FFFFC857" android:pathData="M42,26m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+    <path android:fillColor="#FF5EE6A8" android:pathData="M60,27m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+    <path android:fillColor="#FF6EC1FF" android:pathData="M71,42m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+    <path android:fillColor="#FFB78CFF" android:pathData="M30,60m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+</vector>
