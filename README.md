@@ -1,3 +1,66 @@
+# Hybrid Home: an Apple TV × Google TV launcher for Android TV
+
+This fork of [CleanYourTV](https://github.com/Gathin23/cleanyourtv) reworks its launcher into a hybrid of the
+two TV homes: tvOS's frosted glass, dock and springy focus, with Google TV's Continue Watching. It was built
+and tested on a TCL Android TV 11 (Realtek RTD2851A, 2 GB RAM, 1080p). The debloat side of the project is
+unchanged; everything below lives in [`launcher/`](launcher/).
+
+<p align="center">
+  <img src="docs/hybrid/home.jpg" alt="Home: Jump Back In above the frosted dock" width="900">
+</p>
+
+| | |
+|:--:|:--:|
+| <img src="docs/hybrid/shelf.jpg" alt="Jump Back In with recently played media" width="440"> | <img src="docs/hybrid/header-blur.jpg" alt="Apps scrolled behind the header, out of focus" width="440"> |
+| **Jump Back In.** What each app last played (title, channel, artwork, progress), or the apps you opened last. | **Out-of-focus header.** Rows scroll up behind the clock and buttons as soft, blurred shapes. |
+| <img src="docs/hybrid/wifi-menu.jpg" alt="Network menu listing nearby Wi-Fi" width="440"> | <img src="docs/hybrid/theme-app.jpg" alt="The Theme app" width="440"> |
+| **Network menu.** Current and nearby Wi-Fi with security and signal, like the Inputs menu. | **Theme app.** Wallpapers, screensaver, app grid and look, all from the remote. |
+| <img src="docs/hybrid/speed-up.jpg" alt="Speed Up closing background apps" width="440"> | |
+| **Speed Up.** Closes background apps and reports the memory freed. | |
+
+*The aerial video background doesn't appear in screenshots: this TV draws video on its own hardware layer.
+Network names are blurred.*
+
+### What's new
+
+- **Frosted glass, tvOS style.** A translucent dock band, glass popups and a single glass highlight that
+  springs from tile to tile with an overshoot zoom. Jump Back In cards and the top buttons move the same way.
+- **Video wallpapers.** Muted aerial loops behind Home (16 Pexels clips re-encoded as seamless loops), a dip to
+  black between clips, a chosen change interval, and playback only while Home is in front.
+- **Jump Back In / Continue Watching.** Watch Next items when apps publish them; otherwise recently opened
+  apps. Apps that announce what they play (Spotify, YouTube and others) show the track or video itself.
+  Hold OK on a card to remove it or clear the row. The row runs to the screen edge and fades there.
+- **Now Playing.** Music playing in the background appears above Jump Back In with its artwork and
+  play/pause, previous and next, with no panel behind it.
+- **Theme app.** Its own tile on Home: wallpaper on or off, change interval, order, dimming, pick or delete
+  clips; screensaver style (aerial videos or clock) and start delay; apps per row (5 by default), rows under
+  the dock, highlight colour, frost strength, clock, animations.
+- **Aerial screensaver.** The same clips, shuffled, with an optional drifting clock.
+- **Speed Up app.** Ends background processes of every app except the launcher, core system and TV
+  services, and whatever is playing, then reports the memory freed.
+- **Easier editing.** Hold OK on any tile for Move or App info. Up from the dock always lands on the nearest
+  Jump Back In card, and Down from the top buttons steps back into it.
+
+### Install
+
+Same as upstream (see [Doing it by hand](#doing-it-by-hand) below):
+
+```bash
+powershell -ExecutionPolicy Bypass -File launcher\build-and-install.ps1 -TvHost <tv ip>
+```
+
+The install scripts also grant what the new features need: usage access (Jump Back In), notification access
+for media sessions (Now Playing and recently played; notifications themselves are never read), system
+settings (screensaver delay) and storage (video wallpapers).
+
+- **Wallpapers:** copy `.mp4` files to `Movies/TvHome` on the TV (`adb push clip.mp4 /sdcard/Movies/TvHome/`).
+  Home imports them on its next visit, and the Theme app can then delete them.
+- **Screensaver:** in the Theme app choose *Choose the TV's screensaver…* and pick **Home Screensaver**.
+
+Upstream's README follows.
+
+---
+
 <p align="center">
   <a href="https://cleanyour.tv"><img src="https://raw.githubusercontent.com/Gathin23/cleanyourtv/main/docs/banner.png" alt="CleanYourTV. Your TV, minus the ads." width="800"></a>
 </p>
