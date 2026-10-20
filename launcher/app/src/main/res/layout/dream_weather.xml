@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Screensaver weather under the clock: icon, temperature, conditions with high and low, and the place. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/dreamWeather"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="4dp"
+    android:layout_marginTop="26dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:visibility="gone">
+
+    <ImageView
+        android:id="@+id/dreamWxIcon"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:alpha="0.9"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/dreamWxTemp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:textColor="#E6FFFFFF"
+        android:textSize="56sp"
+        android:fontFamily="@font/outfit_extralight"
+        android:includeFontPadding="false" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/dreamWxDesc"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#D9FFFFFF"
+            android:textSize="20sp"
+            android:fontFamily="@font/outfit_regular" />
+
+        <TextView
+            android:id="@+id/dreamWxHighLow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="#99FFFFFF"
+            android:textSize="16sp"
+            android:fontFamily="@font/outfit_regular" />
+
+        <TextView
+            android:id="@+id/dreamWxPlace"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="#80FFFFFF"
+            android:textSize="13sp"
+            android:fontFamily="@font/outfit_medium"
+            android:letterSpacing="0.16"
+            android:textAllCaps="true" />
+    </LinearLayout>
+</LinearLayout>

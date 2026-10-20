@@ -158,6 +158,31 @@
     <string name="speed_done">Freed %1$d MB</string>
     <string name="speed_detail">Checked %1$d apps and closed any running in the background.\n%2$d MB of memory is free now.</string>
     <string name="speed_already">Already running lean</string>
+
+    <!-- Weather -->
+    <string name="wx_clear">Clear</string>
+    <string name="wx_mostly_clear">Mostly clear</string>
+    <string name="wx_partly_cloudy">Partly cloudy</string>
+    <string name="wx_cloudy">Cloudy</string>
+    <string name="wx_fog">Fog</string>
+    <string name="wx_drizzle">Drizzle</string>
+    <string name="wx_rain">Rain</string>
+    <string name="wx_heavy_rain">Heavy rain</string>
+    <string name="wx_snow">Snow</string>
+    <string name="wx_storm">Thunderstorm</string>
+    <string name="wx_line">%1$s · %2$s · %3$s</string>
+    <string name="wx_high_low">H %1$s  L %2$s</string>
+    <string name="theme_weather">Weather</string>
+    <string name="theme_wx_location">Location</string>
+    <string name="theme_wx_units">Units</string>
+    <string name="theme_wx_home">Weather on Home</string>
+    <string name="theme_wx_saver">Weather on screensaver</string>
+    <string name="theme_wx_search_title">Search for a town or city</string>
+    <string name="theme_wx_search">Search</string>
+    <string name="theme_wx_searching">Searching…</string>
+    <string name="theme_wx_none">No places found for \"%1$s\"</string>
+    <string name="theme_wx_offline">Can\'t reach the weather service. Check the TV\'s internet connection.</string>
+    <string name="theme_wx_set">Weather location: %1$s</string>
     <string name="reorder_not_saved">Couldn\'t save the new order</string>
     <string name="app_library">App library</string>
     <string name="library_empty">No launchable apps found</string>

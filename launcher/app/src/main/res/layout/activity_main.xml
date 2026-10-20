@@ -255,6 +255,24 @@
                             android:fontFamily="@font/outfit_regular"
                             android:letterSpacing="0.14"
                             android:textAllCaps="true" />
+
+                        <!-- Weather for the place picked in the Theme app; gone until there is a reading. -->
+                        <TextView
+                            android:id="@+id/weatherLine"
+                            android:gravity="left|center_vertical"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="5dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:drawablePadding="7dp"
+                            android:drawableTint="#E6FFFFFF"
+                            android:textColor="#E6FFFFFF"
+                            android:textSize="15sp"
+                            android:fontFamily="@font/outfit_regular"
+                            android:shadowColor="#99000000"
+                            android:shadowRadius="8"
+                            android:visibility="gone" />
                     </LinearLayout>
                 </LinearLayout>
 

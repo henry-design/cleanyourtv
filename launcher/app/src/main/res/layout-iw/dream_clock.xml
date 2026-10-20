@@ -89,5 +89,7 @@
             android:fontVariationSettings="'wght' 400"
             android:letterSpacing="0.14"
             android:textAllCaps="true" />
+
+        <include layout="@layout/dream_weather" />
     </LinearLayout>
 </FrameLayout>

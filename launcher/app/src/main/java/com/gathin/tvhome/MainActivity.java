@@ -249,6 +249,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             updateGreeting();
             updateWifiLabel();
             sky.update();
+            refreshWeather();
             handler.postDelayed(this, MINUTE_MS);
         }
     };
@@ -676,6 +677,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         rebuildOnResume = false;
         videoBg.start();
         nowPlaying.start();
+        showWeather(Weather.cached(this));
+        refreshWeather();
         Context app = getApplicationContext();
         Shelf.EXEC.execute(() -> {
             // Clips pushed to Movies/TvHome join the rotation from the next switch.
@@ -1394,6 +1397,30 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private int heroPosition = -1;
 
     /** Reloads Continue Watching in the background; the shelf appears (or goes) at the next dock focus. */
+    /** A fresh reading at most every 30 minutes (Weather keeps the cache); nothing when weather is off on Home. */
+    private void refreshWeather() {
+        if (!Weather.onHome(this)) return;
+        Weather.refresh(this, false, n -> {
+            if (!isDestroyed()) showWeather(n);
+        });
+    }
+
+    /** "☀ 23° · Clear · Ruaka" under the date; gone while there is no reading or weather is off on Home. */
+    private void showWeather(Weather.Now n) {
+        TextView line = findViewById(R.id.weatherLine);
+        if (n == null || !Weather.onHome(this)) {
+            line.setVisibility(View.GONE);
+            return;
+        }
+        line.setText(getString(R.string.wx_line, Weather.degrees(n.temp), Weather.describe(this, n.code),
+                Weather.placeName(this)));
+        int size = Math.round(18 * density);
+        Drawable icon = getDrawable(Weather.icon(n.code, n.day));
+        icon.setBounds(0, 0, size, size);
+        line.setCompoundDrawablesRelative(icon, null, null, null);
+        line.setVisibility(View.VISIBLE);
+    }
+
     /** Glass highlight colour: a festival's accent, else the Theme app's choice (0 = white glass). */
     private int baseAccent() {
         return festive ? festival.accentColor() : ThemePrefs.ACCENTS[ThemePrefs.accent(this)];

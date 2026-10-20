@@ -80,5 +80,7 @@
             android:fontFamily="@font/outfit_regular"
             android:letterSpacing="0.14"
             android:textAllCaps="true" />
+
+        <include layout="@layout/dream_weather" />
     </LinearLayout>
 </FrameLayout>

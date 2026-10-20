@@ -111,6 +111,9 @@ public final class SpeedUpActivity extends Activity {
         keep.add("com.google.android.gms");
         keep.add("com.google.android.gsf");
         keep.add("com.google.android.katniss");
+        keep.add("com.google.android.apps.mediashell");   // Chromecast built-in: ending it drops casting
+        keep.add("com.google.android.tv.remote.service"); // phone remote (Google Home / Google TV app)
+        keep.add("com.google.android.apps.nbu.smartconnect.tv");
         keep.add("com.google.android.tvrecommendations");
         keep.add("com.tcl.tv");
         keep.add("com.tcl.tvinput");

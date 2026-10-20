@@ -138,6 +138,14 @@ public final class ThemeActivity extends Activity {
             open(new Intent(Settings.ACTION_DREAM_SETTINGS));
         });
 
+        // Weather
+        LinearLayout wx = section(R.string.theme_weather);
+        row(wx, "wx_place", getString(R.string.theme_wx_location), () -> Weather.placeName(this), this::pickPlace);
+        cycle(wx, "wx_units", R.string.theme_wx_units, () -> Weather.fahrenheit(this) ? "°F" : "°C", () ->
+                ThemePrefs.edit(this).putBoolean(Weather.FAHRENHEIT, !Weather.fahrenheit(this)).apply());
+        toggle(wx, "wx_home", R.string.theme_wx_home, Weather.ON_HOME, true, false);
+        toggle(wx, "wx_saver", R.string.theme_wx_saver, Weather.ON_SAVER, true, false);
+
         // Apps
         LinearLayout apps = section(R.string.theme_apps);
         cycle(apps, "columns", R.string.theme_columns, () -> String.valueOf(Config.load(this).columns), () -> {
@@ -217,6 +225,55 @@ public final class ThemeActivity extends Activity {
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
+    }
+
+    // ---- weather location ----------------------------------------------------------------------
+
+    /** Location → type a town (the on-screen keyboard), then pick one of the places found. */
+    private void pickPlace() {
+        android.widget.EditText input = new android.widget.EditText(this);
+        input.setSingleLine(true);
+        input.setText(Weather.placeName(this));
+        input.selectAll();
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.theme_wx_search_title)
+                .setView(input)
+                .setPositiveButton(R.string.theme_wx_search, (d, w) -> searchPlaces(input.getText().toString()))
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void searchPlaces(String query) {
+        if (query.trim().isEmpty()) return;
+        Toast.makeText(this, R.string.theme_wx_searching, Toast.LENGTH_SHORT).show();
+        Shelf.EXEC.execute(() -> {
+            List<Weather.Place> found;
+            try {
+                found = Weather.search(query);
+            } catch (java.io.IOException e) {
+                runOnUiThread(() -> Toast.makeText(this, R.string.theme_wx_offline, Toast.LENGTH_LONG).show());
+                return;
+            }
+            runOnUiThread(() -> {
+                if (isFinishing()) return;
+                if (found.isEmpty()) {
+                    Toast.makeText(this, getString(R.string.theme_wx_none, query.trim()), Toast.LENGTH_LONG).show();
+                    return;
+                }
+                CharSequence[] names = new CharSequence[found.size()];
+                for (int i = 0; i < names.length; i++) names[i] = found.get(i).toString();
+                new AlertDialog.Builder(this)
+                        .setTitle(R.string.theme_wx_location)
+                        .setItems(names, (d, which) -> {
+                            Weather.Place p = found.get(which);
+                            Weather.setPlace(this, p);
+                            Weather.refresh(this, true, n -> { });
+                            Toast.makeText(this, getString(R.string.theme_wx_set, p.name), Toast.LENGTH_SHORT).show();
+                            build();
+                        })
+                        .show();
+            });
+        });
     }
 
     // ---- screensaver timeout -------------------------------------------------------------------

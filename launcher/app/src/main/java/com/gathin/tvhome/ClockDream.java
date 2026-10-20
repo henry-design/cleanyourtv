@@ -35,6 +35,7 @@ public class ClockDream extends DreamService {
         public void run() {
             moveClock();
             shiftGlow();
+            refreshWeather();
             handler.postDelayed(this, MOVE_MS);
         }
     };
@@ -72,12 +73,36 @@ public class ClockDream extends DreamService {
         super.onDreamingStarted();
         if (aerial != null) aerial.start();
         if (!showClock) return;
+        showWeather(Weather.cached(this));
+        refreshWeather();
         content.setAlpha(0f);
         content.post(() -> {
             placeClock();
             content.animate().alpha(1f).setDuration(1200).start();
         });
         handler.postDelayed(tick, MOVE_MS);
+    }
+
+    private void refreshWeather() {
+        if (!Weather.onSaver(this)) return;
+        Weather.refresh(this, false, this::showWeather);
+    }
+
+    /** Icon, temperature, conditions with high and low, and the place, under the clock and date. */
+    private void showWeather(Weather.Now n) {
+        View block = findViewById(R.id.dreamWeather);
+        if (block == null) return;
+        if (n == null || !Weather.onSaver(this)) {
+            block.setVisibility(View.GONE);
+            return;
+        }
+        ((android.widget.ImageView) findViewById(R.id.dreamWxIcon)).setImageResource(Weather.icon(n.code, n.day));
+        ((android.widget.TextView) findViewById(R.id.dreamWxTemp)).setText(Weather.degrees(n.temp));
+        ((android.widget.TextView) findViewById(R.id.dreamWxDesc)).setText(Weather.describe(this, n.code));
+        ((android.widget.TextView) findViewById(R.id.dreamWxHighLow)).setText(
+                getString(R.string.wx_high_low, Weather.degrees(n.high), Weather.degrees(n.low)));
+        ((android.widget.TextView) findViewById(R.id.dreamWxPlace)).setText(Weather.placeName(this));
+        block.setVisibility(View.VISIBLE);
     }
 
     @Override
