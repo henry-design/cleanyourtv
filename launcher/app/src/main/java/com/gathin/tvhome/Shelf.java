@@ -316,7 +316,8 @@ final class Shelf {
     // ---- the row ---------------------------------------------------------------------------------
 
     interface CardListener {
-        void onCardFocused();
+        /** The card's zoom and the glass highlight are drawn by Home, the same as for app tiles. */
+        void onCardFocusChanged(View card, boolean focused);
 
         /** Hold OK on a card: Remove or Clear. */
         void onCardMenu(Item item, View card);
@@ -405,11 +406,7 @@ final class Shelf {
                 name = v.findViewById(R.id.shelfName);
                 sub = v.findViewById(R.id.shelfSub);
                 progress = v.findViewById(R.id.shelfProgress);
-                v.setOnFocusChangeListener((view, focused) -> {
-                    float s = focused ? 1.08f : 1f;
-                    view.animate().scaleX(s).scaleY(s).translationZ(focused ? 12f : 0f).setDuration(160).start();
-                    if (focused) listener.onCardFocused();
-                });
+                v.setOnFocusChangeListener((view, focused) -> listener.onCardFocusChanged(view, focused));
                 v.setOnLongClickListener(view -> {
                     if (item != null) listener.onCardMenu(item, view);
                     return true;

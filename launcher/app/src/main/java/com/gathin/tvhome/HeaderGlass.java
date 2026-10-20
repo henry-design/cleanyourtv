@@ -36,6 +36,7 @@ public class HeaderGlass extends View {
     }
     private final Rect dst = new Rect();
     private RecyclerView source;
+    private final RecyclerView.State state = new RecyclerView.State();
     private View extra;
     private Bitmap small;
     private Canvas smallCanvas;
@@ -122,8 +123,27 @@ public class HeaderGlass extends View {
         smallCanvas.save();
         smallCanvas.scale(1f / SCALE, 1f / SCALE);
         smallCanvas.translate(a[0] - b[0], a[1] - b[1]);
-        v.draw(smallCanvas);
+        if (v instanceof RecyclerView) drawRows((RecyclerView) v);
+        else v.draw(smallCanvas);
         smallCanvas.restore();
+    }
+
+    /**
+     * The grid drawn item by item rather than through its own draw(): drawing the RecyclerView itself here would
+     * run (and use up) its tile entrance animation off screen, leaving the real tiles invisible.
+     */
+    private void drawRows(RecyclerView rv) {
+        for (int i = 0; i < rv.getItemDecorationCount(); i++) {
+            rv.getItemDecorationAt(i).onDraw(smallCanvas, rv, state);
+        }
+        for (int i = 0; i < rv.getChildCount(); i++) {
+            View child = rv.getChildAt(i);
+            if (child.getVisibility() != VISIBLE) continue;
+            smallCanvas.save();
+            smallCanvas.translate(child.getLeft() + child.getTranslationX(), child.getTop() + child.getTranslationY());
+            child.draw(smallCanvas);
+            smallCanvas.restore();
+        }
     }
 
     @Override

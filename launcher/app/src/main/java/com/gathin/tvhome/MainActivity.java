@@ -139,6 +139,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     // How far the grid has scrolled the glass. springY works without it, in grid content space, so a
     // scroll moves the glass in lockstep with its tile instead of becoming a moving spring target.
     private float glassScrollShift;
+    /** The glass sits on a Jump Back In card, so it follows that row's sideways scroll. */
+    private boolean glassOnShelf;
     private boolean glassShown;
     // Static so they survive the activity being destroyed while another app is open (low-memory TVs,
     // or Developer options → "Don't keep activities"); they only reset when the process dies.
@@ -302,8 +304,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         });
         shelf.setItemAnimator(null);
+        shelf.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                // The row slides under the glass: carry the glass's target along so it lands on its card.
+                if (!glassOnShelf || !glassShown || dx == 0) return;
+                glassTargetX -= dx;
+                if (animations) springX.animateToFinalPosition(glassTargetX);
+                else glass.setTranslationX(glassTargetX);
+            }
+        });
         shelfAdapter = new Shelf.Adapter(this, new Shelf.CardListener() {
-            @Override public void onCardFocused() { hideGlass(); }
+            @Override public void onCardFocusChanged(View card, boolean focused) { onShelfCardFocus(card, focused); }
             @Override public void onCardMenu(Shelf.Item item, View card) { showShelfMenu(item, card); }
         });
         shelf.setAdapter(shelfAdapter);
@@ -542,7 +554,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         // Hide the glass when focus leaves the tiles.
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
-            boolean onTile = newF != null && newF.getId() == R.id.card;
+            boolean onTile = newF != null && (newF.getId() == R.id.card || newF.getId() == R.id.shelfCard);
             if (!onTile) hideGlass();
         });
 
@@ -1069,13 +1081,26 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         appLibrary.show();
     }
 
-    @Override
-    public void onTileFocused(int position, View card) {
-        lastFocused = position;
-        lastFocusedKey = adapter.keyAt(position);
-        // Tile rect in root coordinates, using layout positions (ignores the scale animation).
-        Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
-        root.offsetDescendantRectToMyCoords(card, r);
+    /**
+     * The view's rect in root coordinates, at its layout size (its own zoom ignored) but with its parents'
+     * translations included: the shelf block is placed by translation, which offsetDescendantRectToMyCoords skips.
+     */
+    private Rect rectInRoot(View v) {
+        Rect r = new Rect(0, 0, v.getWidth(), v.getHeight());
+        root.offsetDescendantRectToMyCoords(v, r);
+        for (android.view.ViewParent p = v.getParent(); p instanceof View && p != root; p = p.getParent()) {
+            View pv = (View) p;
+            r.offset(Math.round(pv.getTranslationX()), Math.round(pv.getTranslationY()));
+        }
+        return r;
+    }
+
+    /**
+     * Springs the one glass highlight onto {@code card}: an app tile or a Jump Back In card, so both rows move
+     * with the same liquid motion. {@code radius} is the card's own corner radius before zoom.
+     */
+    private void moveGlass(View card, float radius) {
+        Rect r = rectInRoot(card);
         float pad = 6f * density;        // matches GlassView's glow inset
         float scale = adapter.focusScale();
         float w = card.getWidth() * scale + 2 * pad;
@@ -1088,9 +1113,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             lp.width = (int) w;
             lp.height = (int) h;
             glass.setLayoutParams(lp);
-            // GlassView draws its slab inset by pad, i.e. exactly over the zoomed tile: same corners as the tile.
-            glass.setRadius(AppAdapter.cornerRadius(card.getWidth(), density) * scale);
         }
+        // GlassView draws its slab inset by pad, i.e. exactly over the zoomed card: same corners as the card.
+        glass.setRadius(radius * scale);
         glassTargetX = x;
         glassTargetY = y;
         if (!glassShown) {
@@ -1110,6 +1135,39 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             springX.animateToFinalPosition(x);
             springY.animateToFinalPosition(y - glassScrollShift);
         }
+    }
+
+    /** Focus moved onto or off a Jump Back In card: the same zoom-with-overshoot as an app tile, and the glass. */
+    private void onShelfCardFocus(View card, boolean focused) {
+        card.animate().cancel();
+        float s = focused ? adapter.focusScale() : 1f;
+        if (!animations) {
+            card.setScaleX(1f);
+            card.setScaleY(1f);
+        } else if (reducedMotion) {
+            card.animate().scaleX(s).scaleY(s).setDuration(focused ? 120 : 80)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator()).withLayer().start();
+        } else {
+            card.animate().scaleX(s).scaleY(s)
+                    .setDuration(advancedEffects ? (focused ? 220 : 170) : (focused ? 260 : 180))
+                    .setInterpolator(new android.view.animation.OvershootInterpolator(
+                            focused ? (advancedEffects ? 0.7f : 1.6f) : 0f))
+                    .withLayer().start();
+        }
+        if (!focused) return;
+        glassOnShelf = true;
+        moveGlass(card, 14f * density);
+    }
+
+    @Override
+    public void onTileFocused(int position, View card) {
+        lastFocused = position;
+        lastFocusedKey = adapter.keyAt(position);
+        glassOnShelf = false;
+        moveGlass(card, AppAdapter.cornerRadius(card.getWidth(), density));
+        Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
+        root.offsetDescendantRectToMyCoords(card, r);
+        float pad = 6f * density;        // matches GlassView's glow inset
         View item = (View) card.getParent();
         if (dockRow && position < COLUMNS) {
             // Dock: park it at the bottom of the screen and show the top shelf for this app.
