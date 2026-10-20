@@ -78,6 +78,9 @@ final class VideoBackground {
         view.setOnPreparedListener(mp -> {
             player = mp;
             mp.setVolume(0f, 0f);
+            // VideoView keeps the screen on while it plays, which would stop the TV's screensaver from ever starting
+            // over Home: a muted background loop is not watching.
+            mp.setScreenOnWhilePlaying(false);
             // Clips are encoded as seamless loops, so repeating one is invisible; "after each clip" plays it once.
             mp.setLooping(interval != 0 || clips.size() == 1);
             failures = 0;
