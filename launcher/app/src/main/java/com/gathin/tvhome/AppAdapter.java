@@ -53,6 +53,9 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         /** Called for a D-pad direction key on a tile. Return true when handled (focus stays put). */
         boolean onTileVerticalKey(int position, int keyCode);
 
+        /** Hold OK on a tile: offer Move and App info. */
+        void onTileMenu(int position, View card, String pkg);
+
         void onLibraryRequested();
         void onLibraryFocused();
         void onLibraryUp();
@@ -360,7 +363,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         h.card.setVisibility(View.VISIBLE);
         h.card.setFocusable(true);
         h.name.setText(e.name);
-        h.name.setVisibility(dockRow && position < dockSize ? View.INVISIBLE : View.VISIBLE);   // the dock has no labels
+        h.name.setVisibility(View.VISIBLE);   // tvOS: every focused tile, dock included, shows its name below
         boolean focused = h.card.isFocused();   // a rebind after reload() can hit the focused tile
         h.name.setAlpha(focused ? 1f : 0f);
         h.card.setScaleX(focused && animations ? focusScale() : 1f);
@@ -370,6 +373,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         h.banner.setScaleX(focused && advancedEffects ? 1.035f : 1f);
         h.banner.setScaleY(focused && advancedEffects ? 1.035f : 1f);
         if (e.banner != null) {
+            h.card.setBackgroundResource(R.drawable.tile_bg);
             h.banner.setImageDrawable(e.banner);
             h.banner.setVisibility(View.VISIBLE);
             h.icon.setVisibility(View.GONE);
@@ -377,21 +381,27 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         } else {
             h.banner.setImageDrawable(null);
             h.banner.setVisibility(View.GONE);
+            h.card.setBackground(iconTileBackground(ambientColorAt(position)));
             h.icon.setImageDrawable(e.icon);
             h.icon.setVisibility(View.VISIBLE);
             h.label.setText(e.label);
-            h.label.setVisibility(View.VISIBLE);
+            h.label.setVisibility(View.GONE);   // tvOS icons carry no text; the name shows below on focus
         }
         h.card.setOnClickListener(v -> launch(e));
         h.card.setOnLongClickListener(v -> {
-            Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + e.pkg));
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try {
-                ctx.startActivity(i);
-            } catch (ActivityNotFoundException ignored) {
-            }
+            int pos = h.getBindingAdapterPosition();
+            if (pos != RecyclerView.NO_POSITION) listener.onTileMenu(pos, v, e.pkg);
             return true;
         });
+    }
+
+    void openAppInfo(String pkg) {
+        Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + pkg));
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            ctx.startActivity(i);
+        } catch (ActivityNotFoundException ignored) {
+        }
     }
 
     /** Opens the tile's activity by explicit component, with no extras: a card can name nothing else. */
@@ -518,6 +528,24 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         Entry e = items.get(position);
         if (e.ambient == 0) e.ambient = vividColor(e.banner != null ? e.banner : e.icon);
         return e.ambient;
+    }
+
+    /** tvOS-style full-bleed tile for apps without a banner: the app's colour, lit from the top, with a glass rim. */
+    private android.graphics.drawable.GradientDrawable iconTileBackground(int color) {
+        int top = blend(color, 0xFFFFFFFF, 0.18f), bottom = blend(color, 0xFF000000, 0.45f);
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, new int[]{top, bottom});
+        float d = ctx.getResources().getDisplayMetrics().density;
+        g.setCornerRadius(16f * d);
+        g.setStroke(Math.max(1, (int) d), 0x33FFFFFF);
+        return g;
+    }
+
+    private static int blend(int a, int b, float t) {
+        int r = (int) (((a >> 16) & 0xFF) * (1 - t) + ((b >> 16) & 0xFF) * t);
+        int g = (int) (((a >> 8) & 0xFF) * (1 - t) + ((b >> 8) & 0xFF) * t);
+        int bl = (int) ((a & 0xFF) * (1 - t) + (b & 0xFF) * t);
+        return 0xFF000000 | (r << 16) | (g << 8) | bl;
     }
 
     private static int vividColor(Drawable live) {

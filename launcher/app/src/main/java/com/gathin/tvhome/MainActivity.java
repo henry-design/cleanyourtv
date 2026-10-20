@@ -64,6 +64,7 @@ import androidx.dynamicanimation.animation.FloatPropertyCompat;
 import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.io.File;
@@ -102,6 +103,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private GlassView glass;
     private View ambient;
     private TextView heroName;
+    private View shelfBlock;
+    private TextView shelfTitle;
+    private Shelf.Adapter shelfAdapter;
+    private boolean shelfShown;
+    /** Where the shelf's bottom edge goes (root coordinates), kept so a late layout can re-place it. */
+    private float shelfBottom = Float.NaN;
+    private VideoBackground videoBg;
     private int ambientColor = -1;
     private ValueAnimator ambientAnimator;
     private boolean heroShown;
@@ -269,6 +277,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         heroName = findViewById(R.id.heroName);
         // dock_title false: the name above the dock never shows; the glow still follows the dock.
         if (!cfg.dockTitle) heroName.setVisibility(View.GONE);
+        shelfBlock = findViewById(R.id.shelfBlock);
+        shelfTitle = findViewById(R.id.shelfTitle);
+        RecyclerView shelf = findViewById(R.id.shelf);
+        shelf.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        shelf.setItemAnimator(null);
+        shelfAdapter = new Shelf.Adapter(this, this::hideGlass);
+        shelf.setAdapter(shelfAdapter);
+        shelfBlock.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (!Float.isNaN(shelfBottom) && b - t != ob - ot) v.setY(shelfBottom - v.getHeight());
+        });
+        File backgrounds = getExternalFilesDir("backgrounds");
+        File shared = new File(android.os.Environment.getExternalStoragePublicDirectory(
+                android.os.Environment.DIRECTORY_MOVIES), "TvHome");
+        videoBg = new VideoBackground(this, findViewById(R.id.bgVideo), findViewById(R.id.bgScrim), backgrounds, shared);
         greeting = findViewById(R.id.greeting);
         greetingColor = greeting.getCurrentTextColor();
         btnWifi = findViewById(R.id.btnWifi);
@@ -574,6 +596,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             reloadApps(true);
         }
         rebuildOnResume = false;
+        videoBg.start();
+        refreshShelf();
         updateGreeting();
         updateWifiLabel();
         updateInputsButton();
@@ -671,6 +695,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onPause() {
         super.onPause();
         endReorder();   // Home or another app while reordering keeps the order so far
+        videoBg.stop();
         stopAmbientAnimation();
         heroName.animate().cancel();
         ambient.animate().cancel();
@@ -801,6 +826,33 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnReorder.setActivated(true);
         focusTile(Math.max(0, Math.min(lastFocused, adapter.movableCount() - 1)));
         Toast.makeText(this, R.string.reorder_hint, Toast.LENGTH_LONG).show();
+    }
+
+    @Override
+    public void onTileMenu(int position, View card, String pkg) {
+        if (reordering || isFinishing()) return;
+        String key = adapter.keyAt(position);
+        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        PopupWindow popup = glassPopup(panel, (int) (200 * density));
+        if (position < adapter.movableCount() && adapter.movableCount() > 1) {
+            addSettingsMenuRow(rows, popup, R.string.tile_move, () -> startMoving(key));
+        }
+        addSettingsMenuRow(rows, popup, R.string.tile_app_info, () -> adapter.openAppInfo(pkg));
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        popup.setWidth(Math.max((int) (200 * density), panel.getMeasuredWidth()));
+        dropIn(popup, panel, card, Gravity.START);
+        rows.getChildAt(0).requestFocus();
+    }
+
+    /** Hold OK → Move: reorder mode with this tile already picked up. */
+    private void startMoving(String key) {
+        if (!reordering) toggleReorder();
+        if (!reordering) return;
+        int pos = adapter.positionOf(key);
+        if (pos < 0) return;
+        focusTile(pos);
+        pickUp(pos);
     }
 
     private void pickUp(int pos) {
@@ -1000,6 +1052,29 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private void showHero(int position, float dockTopInRoot) {
         String label = adapter.labelAt(position);
         int color = adapter.ambientColorAt(position);
+        heroDockTop = dockTopInRoot;
+        heroPosition = position;
+        if (shelfAdapter.getItemCount() > 0) {
+            // The top shelf holds Continue Watching instead of the big app name; the glow still follows the dock.
+            heroName.animate().cancel();
+            heroName.setAlpha(0f);
+            showShelf(dockTopInRoot);
+            if (!heroShown || !animations || reducedMotion) {
+                ambient.animate().cancel();
+                setAmbient(color);
+                if (animations && !heroShown) {
+                    ambient.setAlpha(0f);
+                    ambient.animate().alpha(1f).setDuration(reducedMotion ? 160 : 600).start();
+                } else {
+                    ambient.setAlpha(1f);
+                }
+            } else if (color != ambientColor) {
+                transitionAmbient(color);
+            }
+            heroShown = true;
+            return;
+        }
+        hideShelf();
         float y = dockTopInRoot - 14 * density - 26 * density - heroName.getHeight();
         boolean changed = !label.contentEquals(heroName.getText());
 
@@ -1136,7 +1211,57 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }).start();
     }
 
+    private float heroDockTop = Float.NaN;
+    private int heroPosition = -1;
+
+    /** Reloads Continue Watching in the background; the shelf appears (or goes) at the next dock focus. */
+    private void refreshShelf() {
+        Set<String> hidden = new HashSet<>(hiddenApps);
+        Context app = getApplicationContext();
+        Shelf.EXEC.execute(() -> {
+            Shelf.Result result = Shelf.load(app, hidden);
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                shelfTitle.setText(result.watchNext ? R.string.continue_watching : R.string.jump_back_in);
+                boolean had = shelfAdapter.getItemCount() > 0;
+                shelfAdapter.submit(result.items);
+                // Re-show the shelf for a dock tile that is focused right now.
+                if (heroShown && heroPosition >= 0 && !Float.isNaN(heroDockTop)
+                        && had != !result.items.isEmpty()) {
+                    heroShown = false;
+                    showHero(heroPosition, heroDockTop);
+                }
+            });
+        });
+    }
+
+    private void showShelf(float dockTopInRoot) {
+        // Above the dock's glass band (DockDecoration pads the band 14dp past the tiles), with a little air.
+        shelfBottom = dockTopInRoot - 14 * density - 16 * density;
+        shelfBlock.setY(shelfBottom - shelfBlock.getHeight());
+        if (shelfShown) return;
+        shelfShown = true;
+        shelfBlock.animate().cancel();
+        shelfBlock.setVisibility(View.VISIBLE);
+        if (animations) shelfBlock.animate().alpha(1f).setDuration(reducedMotion ? 120 : 260).start();
+        else shelfBlock.setAlpha(1f);
+    }
+
+    private void hideShelf() {
+        if (!shelfShown) return;
+        shelfShown = false;
+        shelfBlock.animate().cancel();
+        if (animations) {
+            shelfBlock.animate().alpha(0f).setDuration(reducedMotion ? 100 : 160)
+                    .withEndAction(() -> { if (!shelfShown) shelfBlock.setVisibility(View.INVISIBLE); }).start();
+        } else {
+            shelfBlock.setAlpha(0f);
+            shelfBlock.setVisibility(View.INVISIBLE);
+        }
+    }
+
     private void hideHero() {
+        hideShelf();
         if (!heroShown) return;
         stopAmbientAnimation();
         heroName.animate().cancel();

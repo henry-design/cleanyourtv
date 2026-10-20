@@ -70,6 +70,11 @@
     <string name="card_state_new_label">New name</string>
     <string name="reorder">Reorder apps</string>
     <string name="reorder_hint">OK picks up an app, arrows move it, Back places it. Back again to finish.</string>
+    <string name="tile_move">Move</string>
+    <string name="tile_app_info">App info</string>
+    <string name="continue_watching">Continue Watching</string>
+    <string name="jump_back_in">Jump Back In</string>
+    <string name="shelf_recent">Recently opened</string>
     <string name="reorder_not_saved">Couldn\'t save the new order</string>
     <string name="app_library">App library</string>
     <string name="library_empty">No launchable apps found</string>

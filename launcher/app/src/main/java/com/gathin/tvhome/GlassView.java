@@ -66,8 +66,9 @@ public class GlassView extends View {
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        fill.setShader(new LinearGradient(0, 0, 0, h, 0x3DFFFFFF, 0x12FFFFFF, Shader.TileMode.CLAMP));
-        specular.setShader(new LinearGradient(0, 0, 0, h * 0.45f, 0x66FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
+        // tvOS focus: the artwork stays unveiled; only a specular sheen across the top catches the light.
+        fill.setShader(new LinearGradient(0, 0, 0, h, 0x14FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
+        specular.setShader(new LinearGradient(0, 0, 0, h * 0.45f, 0x52FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
     }
 
     @Override

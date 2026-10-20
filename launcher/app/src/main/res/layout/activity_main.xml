@@ -5,6 +5,24 @@
     android:layout_height="match_parent"
     android:background="#FF000000">
 
+    <!-- Muted aerial video behind everything; mp4s in files/backgrounds on the TV. Gone when there are none. -->
+    <VideoView
+        android:id="@+id/bgVideo"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:focusable="false"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+
+    <!-- Keeps the header and the shelf legible over bright footage. -->
+    <View
+        android:id="@+id/bgScrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_scrim"
+        android:visibility="gone" />
+
     <!-- Time-of-day backdrop, drawn once a minute (config.xml sky_intensity; 0 keeps it hidden). -->
     <com.gathin.tvhome.SkyView
         android:id="@+id/sky"
@@ -32,6 +50,44 @@
         android:letterSpacing="-0.02"
         android:includeFontPadding="false"
         android:singleLine="true" />
+
+    <!-- Top shelf: Continue Watching (watch-next items, or recently opened apps), parked above the dock in code. -->
+    <LinearLayout
+        android:id="@+id/shelfBlock"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:alpha="0"
+        android:visibility="invisible">
+
+        <TextView
+            android:id="@+id/shelfTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="70dp"
+            android:textColor="#E6FFFFFF"
+            android:textSize="17sp"
+            android:fontFamily="@font/outfit_medium"
+            android:letterSpacing="0.01"
+            android:shadowColor="#80000000"
+            android:shadowRadius="8"
+            android:text="@string/continue_watching" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/shelf"
+            android:layout_width="match_parent"
+            android:layout_height="154dp"
+            android:paddingStart="56dp"
+            android:paddingEnd="56dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:clipToPadding="false"
+            android:clipChildren="false"
+            android:overScrollMode="never"
+            android:scrollbars="none" />
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -65,6 +121,7 @@
                     android:singleLine="true"
                     android:ellipsize="end"
                     android:layout_marginStart="4dp"
+                    android:visibility="gone"
                     android:textColor="#8CFFFFFF"
                     android:textSize="12sp"
                     android:fontFamily="@font/outfit_medium"
@@ -84,7 +141,9 @@
                         android:format12Hour="h:mm"
                         android:format24Hour="HH:mm"
                         android:textColor="#FFFFFFFF"
-                        android:textSize="52sp"
+                        android:shadowColor="#66000000"
+                        android:shadowRadius="10"
+                        android:textSize="40sp"
                         android:fontFamily="@font/outfit_light"
                         android:letterSpacing="-0.04"
                         android:includeFontPadding="false" />
