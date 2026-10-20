@@ -59,6 +59,7 @@ public class GlassView extends View {
     }
 
     void setRadius(float px) {
+        if (radius == px) return;   // a redraw re-renders the cached layer
         radius = px;
         invalidate();
     }

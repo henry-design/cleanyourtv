@@ -141,6 +141,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private float glassScrollShift;
     /** The glass sits on a Jump Back In card, so it follows that row's sideways scroll. */
     private boolean glassOnShelf;
+    /** The glass sits on a top button, which stays put while the grid scrolls under the header. */
+    private boolean glassOnHeader;
     private boolean glassShown;
     // Static so they survive the activity being destroyed while another app is open (low-memory TVs,
     // or Developer options → "Don't keep activities"); they only reset when the process dies.
@@ -473,7 +475,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
-                if (!glassShown) return;
+                if (!glassShown || glassOnHeader) return;
                 glassTargetY -= dy;
                 glassScrollShift -= dy;
                 glass.setTranslationY(glass.getTranslationY() - dy);
@@ -529,7 +531,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                // Back to the dock tile Up came from, not wherever the focus finder lands.
+                // One level down: Now Playing, else the Jump Back In card nearest this button, while that row is on
+                // screen; otherwise back to the dock tile Up came from, not wherever the focus finder lands.
+                boolean shelfOnScreen = shelfShown
+                        && shelfBlock.getY() + shelfBlock.getHeight() > headerBottom + 40 * density;
+                if (shelfOnScreen && (nowPlaying.focus() || focusShelfCardNearX(rectInRoot(v).centerX()))) {
+                    v.playSoundEffect(SoundEffectConstants.NAVIGATION_DOWN);
+                    return true;
+                }
                 focusTile(lastFocused % COLUMNS);
                 return true;
             }
@@ -543,18 +552,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnWifi.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
         btnReorder.setOnKeyListener(pillKeys);
-        if (advancedEffects) {
-            for (View button : new View[]{btnInputs, btnWifi, btnReorder, btnSettings}) {
-                button.setOnFocusChangeListener((view, focused) -> view.animate()
-                        .scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f)
-                        .setDuration(160).start());
-            }
+        // The top buttons move like the tiles: the glass springs onto them and they zoom with the same overshoot.
+        // Their row and the header must not clip the zoom.
+        ((ViewGroup) btnSettings.getParent()).setClipChildren(false);
+        ViewGroup headerRow = findViewById(R.id.header);
+        headerRow.setClipChildren(false);
+        headerRow.setClipToPadding(false);   // the rightmost button zooms into the header's side padding
+        for (View button : new View[]{btnInputs, btnWifi, btnReorder, btnSettings}) {
+            button.setOnFocusChangeListener(this::onPillFocus);
         }
         if (festive) applyFestiveSkin((TextView) btnInputs, (TextView) btnSettings);
 
         // Hide the glass when focus leaves the tiles.
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
-            boolean onTile = newF != null && (newF.getId() == R.id.card || newF.getId() == R.id.shelfCard);
+            int id = newF != null ? newF.getId() : View.NO_ID;
+            boolean onTile = id == R.id.card || id == R.id.shelfCard || id == R.id.btnInputs || id == R.id.btnWifi
+                    || id == R.id.btnSettings || id == R.id.btnReorder;
             if (!onTile) hideGlass();
         });
 
@@ -1086,8 +1099,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * translations included: the shelf block is placed by translation, which offsetDescendantRectToMyCoords skips.
      */
     private Rect rectInRoot(View v) {
-        Rect r = new Rect(0, 0, v.getWidth(), v.getHeight());
-        root.offsetDescendantRectToMyCoords(v, r);
+        // From the parent, not the view: a view's own scroll is counted against it otherwise, and a single-line
+        // TextView such as the network pill keeps a large internal scroll (it put the glass half a million px off).
+        Rect r = new Rect(v.getLeft(), v.getTop(), v.getRight(), v.getBottom());
+        View parent = (View) v.getParent();
+        if (parent != root) root.offsetDescendantRectToMyCoords(parent, r);
         for (android.view.ViewParent p = v.getParent(); p instanceof View && p != root; p = p.getParent()) {
             View pv = (View) p;
             r.offset(Math.round(pv.getTranslationX()), Math.round(pv.getTranslationY()));
@@ -1108,11 +1124,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         float x = r.exactCenterX() - w / 2f;
         float y = r.exactCenterY() - h / 2f - (advancedEffects ? 4f * density : 0f);
 
+        // Resized in place: setLayoutParams would lay out the whole screen on every move between targets of
+        // different sizes (the top buttons, the shelf cards), which is what made the highlight stutter.
         ViewGroup.LayoutParams lp = glass.getLayoutParams();
-        if (lp.width != (int) w || lp.height != (int) h) {
-            lp.width = (int) w;
-            lp.height = (int) h;
-            glass.setLayoutParams(lp);
+        int iw = Math.round(w), ih = Math.round(h);
+        if (lp.width != iw || lp.height != ih) {
+            lp.width = iw;
+            lp.height = ih;
+            glass.layout(glass.getLeft(), glass.getTop(), glass.getLeft() + iw, glass.getTop() + ih);
         }
         // GlassView draws its slab inset by pad, i.e. exactly over the zoomed card: same corners as the card.
         glass.setRadius(radius * scale);
@@ -1139,24 +1158,39 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** Focus moved onto or off a Jump Back In card: the same zoom-with-overshoot as an app tile, and the glass. */
     private void onShelfCardFocus(View card, boolean focused) {
-        card.animate().cancel();
+        zoom(card, focused);
+        if (!focused) return;
+        glassOnShelf = true;
+        glassOnHeader = false;
+        moveGlass(card, 14f * density);
+    }
+
+    /** Focus moved onto or off a top button (Inputs, network, Settings): the tiles' zoom and glass, pill-shaped. */
+    private void onPillFocus(View pill, boolean focused) {
+        zoom(pill, focused);
+        if (!focused) return;
+        glassOnShelf = false;
+        glassOnHeader = true;
+        moveGlass(pill, pill.getHeight() / 2f);
+    }
+
+    /** The app tiles' focus zoom: a springy overshoot in, a plain settle out (calmer with reduced motion). */
+    private void zoom(View v, boolean focused) {
+        v.animate().cancel();
         float s = focused ? adapter.focusScale() : 1f;
         if (!animations) {
-            card.setScaleX(1f);
-            card.setScaleY(1f);
+            v.setScaleX(1f);
+            v.setScaleY(1f);
         } else if (reducedMotion) {
-            card.animate().scaleX(s).scaleY(s).setDuration(focused ? 120 : 80)
+            v.animate().scaleX(s).scaleY(s).setDuration(focused ? 120 : 80)
                     .setInterpolator(new android.view.animation.DecelerateInterpolator()).withLayer().start();
         } else {
-            card.animate().scaleX(s).scaleY(s)
+            v.animate().scaleX(s).scaleY(s)
                     .setDuration(advancedEffects ? (focused ? 220 : 170) : (focused ? 260 : 180))
                     .setInterpolator(new android.view.animation.OvershootInterpolator(
                             focused ? (advancedEffects ? 0.7f : 1.6f) : 0f))
                     .withLayer().start();
         }
-        if (!focused) return;
-        glassOnShelf = true;
-        moveGlass(card, 14f * density);
     }
 
     @Override
@@ -1164,6 +1198,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         lastFocused = position;
         lastFocusedKey = adapter.keyAt(position);
         glassOnShelf = false;
+        glassOnHeader = false;
         moveGlass(card, AppAdapter.cornerRadius(card.getWidth(), density));
         Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
         root.offsetDescendantRectToMyCoords(card, r);
@@ -1420,18 +1455,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Focuses the visible shelf card whose centre is closest, left to right, to this dock tile's centre. */
     private boolean focusNearestShelfCard(int dockPosition) {
         RecyclerView.ViewHolder holder = grid.findViewHolderForAdapterPosition(dockPosition);
+        if (holder == null) return false;
+        return focusShelfCardNearX(rectInRoot(holder.itemView).centerX());
+    }
+
+    /** Focuses the visible shelf card whose centre is closest, left to right, to {@code centerX} (root coordinates). */
+    private boolean focusShelfCardNearX(int centerX) {
         RecyclerView shelf = findViewById(R.id.shelf);
-        if (holder == null || shelf == null || shelf.getChildCount() == 0) return false;
-        Rect tile = new Rect(0, 0, holder.itemView.getWidth(), holder.itemView.getHeight());
-        root.offsetDescendantRectToMyCoords(holder.itemView, tile);
+        if (shelf == null || shelf.getVisibility() != View.VISIBLE || shelf.getChildCount() == 0) return false;
         View best = null;
         int bestDistance = Integer.MAX_VALUE;
         for (int i = 0; i < shelf.getChildCount(); i++) {
             View card = shelf.getChildAt(i);
-            Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
-            root.offsetDescendantRectToMyCoords(card, r);
+            Rect r = rectInRoot(card);
             if (r.right < 0 || r.left > root.getWidth()) continue;
-            int d = Math.abs(r.centerX() - tile.centerX());
+            int d = Math.abs(r.centerX() - centerX);
             if (d < bestDistance) {
                 bestDistance = d;
                 best = card;
